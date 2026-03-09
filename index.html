@@ -484,10 +484,14 @@
     // ---- Play / Pause ----
     playBtn.addEventListener('click', async () => {
         if (!audioInitialized) {
+            // Request motion permission FIRST — must happen in direct response
+            // to user gesture (before any awaits) or iOS will silently deny it
+            await requestMotionPermission();
+
             playBtn.textContent = 'Loading...';
             playBtn.classList.add('loading');
             try {
-                await initAudioAndMotion();
+                await initAudio();
                 audioInitialized = true;
             } catch (e) {
                 setStatus('Error: ' + e.message);
@@ -538,7 +542,7 @@
         debugTaps++;
         clearTimeout(debugTimer);
         debugTimer = setTimeout(() => { debugTaps = 0; }, 2000);
-        if (debugTaps >= 5) {
+        if (debugTaps >= 3) {
             debugVisible = !debugVisible;
             debugEl.style.display = debugVisible ? 'block' : 'none';
             debugTaps = 0;
@@ -546,7 +550,7 @@
     });
 
     // ---- Initialization ----
-    async function initAudioAndMotion() {
+    async function initAudio() {
         // Init audio context (requires user gesture)
         await audio.init();
         setStatus('Loading audio...');
@@ -556,9 +560,6 @@
         const v = parseFloat(slider.value);
         audio.setSteadyVolume(v);
         motion.setIOFactor(-120 * v + 41.2);
-
-        // Request motion permission (iOS 13+)
-        await requestMotionPermission();
         setStatus('');
     }
 
@@ -662,7 +663,11 @@
                     `exhaleVol:    ${motion.exhaleVol.toFixed(3)}\n` +
                     `ioFactor:     ${motion.ioFactor.toFixed(1)}\n` +
                     `mode:         ${motion.simulationMode ? 'simulation' : 'motion'}\n` +
-                    `motionDetect: ${motion.motionDetected}`;
+                    `motionDetect: ${motion.motionDetected}\n` +
+                    `betaVaried:   ${orientationHasVaried}\n` +
+                    `samples:      ${orientationSampleCount}\n` +
+                    `prevBeta:     ${motion.previousBeta !== null ? (motion.previousBeta * 180 / Math.PI).toFixed(1) + '°' : 'null'}\n` +
+                    `attack/rel:   ${ATTACK_TIME.toFixed(2)}s / ${RELEASE_TIME.toFixed(2)}s`;
             }
 
             requestAnimationFrame(tick);
