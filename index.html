@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RealBreath</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Futura', 'Century Gothic', sans-serif;
+            background: #fff;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100dvh;
+            padding: 0 20px 40px;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        #app {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            justify-content: center;
+            gap: 0;
+        }
+
+        h1 {
+            font-size: 48px;
+            font-weight: 500;
+            text-align: center;
+            margin-bottom: 16px;
+            letter-spacing: 1px;
+        }
+
+        #instruction-img {
+            width: 280px;
+            height: auto;
+            margin-bottom: 24px;
+            opacity: 0.85;
+        }
+
+        #scene-picker {
+            width: 100%;
+            padding: 16px 20px;
+            font-family: 'Futura', 'Century Gothic', sans-serif;
+            font-size: 16px;
+            border: none;
+            background: #f8f8f8;
+            border-radius: 35px;
+            text-align: center;
+            appearance: none;
+            -webkit-appearance: none;
+            color: #333;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: box-shadow 0.15s ease-out, transform 0.15s ease-out;
+            box-shadow: 0 0 0 0 rgba(0,0,0,0);
+        }
+
+        #play-btn {
+            width: 100%;
+            padding: 22px;
+            font-family: 'Futura', 'Century Gothic', sans-serif;
+            font-size: 16px;
+            font-weight: 500;
+            border: none;
+            background: #333;
+            color: #fff;
+            border-radius: 35px;
+            cursor: pointer;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+            transition: opacity 0.2s;
+        }
+
+        #play-btn:active { opacity: 0.7; }
+
+        #play-btn.loading {
+            background: #999;
+            pointer-events: none;
+        }
+
+        #slider-container {
+            width: 100%;
+        }
+
+        #sensitivity {
+            width: 100%;
+            height: 4px;
+            appearance: none;
+            -webkit-appearance: none;
+            background: #ccc;
+            border-radius: 2px;
+            outline: none;
+            margin: 8px 0 4px;
+        }
+
+        #sensitivity::-webkit-slider-thumb {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #555;
+            cursor: pointer;
+        }
+
+        #slider-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: #888;
+        }
+
+        #slider-labels .center {
+            font-weight: 600;
+            color: #666;
+        }
+
+        .param-slider {
+            width: 100%;
+            margin-top: 12px;
+        }
+
+        .param-slider label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 2px;
+        }
+
+        .param-slider label .value {
+            color: #666;
+            font-weight: 600;
+        }
+
+        .param-slider input[type="range"] {
+            width: 100%;
+            height: 4px;
+            appearance: none;
+            -webkit-appearance: none;
+            background: #ccc;
+            border-radius: 2px;
+            outline: none;
+        }
+
+        .param-slider input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #555;
+            cursor: pointer;
+        }
+
+        #status-msg {
+            font-size: 13px;
+            color: #aaa;
+            text-align: center;
+            margin-top: 12px;
+            min-height: 18px;
+        }
+
+        #debug {
+            display: none;
+            width: 100%;
+            max-width: 400px;
+            margin-top: 16px;
+            padding: 12px;
+            background: #f5f5f5;
+            border-radius: 12px;
+            font-size: 11px;
+            font-family: monospace;
+            line-height: 1.6;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <h1 id="title">RealBreath</h1>
+
+        <img id="instruction-img" src="phoneimg8.png" alt="Place phone on chest — tilt controls sound">
+
+        <select id="scene-picker">
+            <option value="rain">Rain</option>
+            <option value="river">River</option>
+            <option value="stream">Stream</option>
+            <option value="synth">Synth</option>
+        </select>
+
+        <button id="play-btn">Play</button>
+
+        <div id="slider-container">
+            <input type="range" id="sensitivity" min="0.01" max="0.3" step="0.005" value="0.07">
+            <div id="slider-labels">
+                <span>Breath</span>
+                <span class="center">Sensitivity</span>
+                <span>Steady</span>
+            </div>
+        </div>
+
+        <div class="param-slider">
+            <label>Attack <span class="value" id="attack-val">0.08s</span></label>
+            <input type="range" id="attack-slider" min="0.02" max="0.5" step="0.01" value="0.08">
+        </div>
+
+        <div class="param-slider">
+            <label>Release <span class="value" id="release-val">0.80s</span></label>
+            <input type="range" id="release-slider" min="0.1" max="2.0" step="0.05" value="0.80">
+        </div>
+
+        <div id="status-msg"></div>
+    </div>
+
+    <div id="debug"></div>
+
+    <script>
+    // ==================== CONFIGURATION ====================
+
+    const SCENES = {
+        rain:   { steady: 'audio/steadyRain.mp3',   inhale: 'audio/InhaleRain500.mp3',   exhale: 'audio/ExhaleRain500.mp3' },
+        river:  { steady: 'audio/SteadyRiver.mp3',  inhale: 'audio/InhaleRiver500.mp3',  exhale: 'audio/ExhaleRiver500.mp3' },
+        stream: { steady: 'audio/SteadyBrook.mp3',  inhale: 'audio/InhaleBrook500.mp3',  exhale: 'audio/ExhaleBrook500.mp3' },
+        synth:  { steady: 'audio/droneLoop.mp3',    inhale: 'audio/inhaleLoop.mp3',      exhale: 'audio/exhaleLoop.mp3' },
+    };
+
+    // Attack/release envelope constants (mutable — controlled by UI sliders)
+    let ATTACK_TIME = 0.08;             // seconds — fast onset tracking
+    let RELEASE_TIME = 0.80;            // seconds — smooth decay
+    const MAX_DELTA_PER_SECOND = 0.15;  // rad/s — spike rejection clamp
+    const RATE_CLAMP = 0.12;            // rad/s — max magnitude for volume mapping
+
+    // ==================== AUDIO ENGINE ====================
+
+    class AudioEngine {
+        constructor() {
+            this.ctx = null;
+            this.buffers = {};
+            this.sources = {};
+            this.gains = {};
+            this.playing = false;
+            this.loadedScene = null;
+            this.cache = {};  // cache decoded buffers by URL
+        }
+
+        async init() {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+            this.gains.steady = this.ctx.createGain();
+            this.gains.inhale = this.ctx.createGain();
+            this.gains.exhale = this.ctx.createGain();
+            this.gains.master = this.ctx.createGain();
+
+            this.gains.steady.connect(this.gains.master);
+            this.gains.inhale.connect(this.gains.master);
+            this.gains.exhale.connect(this.gains.master);
+            this.gains.master.connect(this.ctx.destination);
+
+            this.gains.master.gain.value = 0;
+            this.gains.steady.gain.value = 0.07;
+            this.gains.inhale.gain.value = 0;
+            this.gains.exhale.gain.value = 0;
+        }
+
+        async fetchAndDecode(url) {
+            if (this.cache[url]) return this.cache[url];
+            const resp = await fetch(url);
+            const arrayBuf = await resp.arrayBuffer();
+            const audioBuf = await this.ctx.decodeAudioData(arrayBuf);
+            this.cache[url] = audioBuf;
+            return audioBuf;
+        }
+
+        async loadScene(sceneKey) {
+            const files = SCENES[sceneKey];
+            const [steady, inhale, exhale] = await Promise.all([
+                this.fetchAndDecode(files.steady),
+                this.fetchAndDecode(files.inhale),
+                this.fetchAndDecode(files.exhale),
+            ]);
+            this.buffers = { steady, inhale, exhale };
+            this.loadedScene = sceneKey;
+        }
+
+        startSources() {
+            this.stopSources();
+            for (const key of ['steady', 'inhale', 'exhale']) {
+                const src = this.ctx.createBufferSource();
+                src.buffer = this.buffers[key];
+                src.loop = true;
+                src.connect(this.gains[key]);
+                src.start(0);
+                this.sources[key] = src;
+            }
+        }
+
+        stopSources() {
+            for (const key of ['steady', 'inhale', 'exhale']) {
+                if (this.sources[key]) {
+                    try { this.sources[key].stop(); } catch (e) {}
+                    this.sources[key] = null;
+                }
+            }
+        }
+
+        play() {
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+            this.startSources();
+            // Fade in master over ~3s (time constant 1.0 → 95% in 3s)
+            const now = this.ctx.currentTime;
+            this.gains.master.gain.cancelScheduledValues(now);
+            this.gains.master.gain.setValueAtTime(this.gains.master.gain.value, now);
+            this.gains.master.gain.setTargetAtTime(1.0, now, 1.0);
+            this.playing = true;
+        }
+
+        stop() {
+            const now = this.ctx.currentTime;
+            this.gains.master.gain.cancelScheduledValues(now);
+            this.gains.master.gain.setValueAtTime(this.gains.master.gain.value, now);
+            this.gains.master.gain.setTargetAtTime(0, now, 0.33);
+            this.playing = false;
+            setTimeout(() => {
+                if (!this.playing) this.stopSources();
+            }, 1500);
+        }
+
+        setSteadyVolume(v) {
+            if (this.gains.steady) this.gains.steady.gain.value = v;
+        }
+
+        setBreathVolumes(inhaleVol, exhaleVol) {
+            if (this.gains.inhale) this.gains.inhale.gain.value = inhaleVol;
+            if (this.gains.exhale) this.gains.exhale.gain.value = exhaleVol;
+        }
+    }
+
+    // ==================== MOTION PROCESSOR ====================
+
+    class MotionProcessor {
+        constructor() {
+            this.previousBeta = null;
+            this.previousTime = null;
+            this.smoothedRate = 0;
+            this.ioFactor = 20;
+            this.active = false;
+            this.motionDetected = false;
+            this.simulationMode = false;
+            this.simulationStart = 0;
+
+            this.inhaleVol = 0;
+            this.exhaleVol = 0;
+        }
+
+        processOrientation(beta, timestamp) {
+            if (beta === null) return;
+
+            const betaRad = beta * Math.PI / 180;
+            const now = timestamp / 1000; // ms → seconds
+
+            if (this.previousBeta === null) {
+                this.previousBeta = betaRad;
+                this.previousTime = now;
+                return;
+            }
+
+            const dt = now - this.previousTime;
+            if (dt <= 0 || dt > 0.5) {
+                // Skip bad frames (first frame, tab backgrounded, etc.)
+                this.previousBeta = betaRad;
+                this.previousTime = now;
+                return;
+            }
+
+            // Step 1: Raw delta
+            let rawDelta = betaRad - this.previousBeta;
+            this.previousBeta = betaRad;
+            this.previousTime = now;
+
+            // Step 2: Spike rejection — clamp delta by max rate
+            const maxDelta = MAX_DELTA_PER_SECOND * dt;
+            rawDelta = Math.max(-maxDelta, Math.min(maxDelta, rawDelta));
+
+            // Step 3: Convert to rate (frame-rate independent)
+            const deltaRate = rawDelta / dt;
+
+            // Step 4: Attack/release envelope follower
+            const attackCoeff = 1.0 - Math.exp(-dt / ATTACK_TIME);
+            const releaseCoeff = 1.0 - Math.exp(-dt / RELEASE_TIME);
+
+            const coeff = (Math.abs(deltaRate) > Math.abs(this.smoothedRate))
+                ? attackCoeff : releaseCoeff;
+            this.smoothedRate += coeff * (deltaRate - this.smoothedRate);
+
+            // Step 5: Compute volumes
+            this.computeVolumes();
+        }
+
+        simulateTick(t) {
+            // Sine wave breathing at ~0.15 Hz (6.7s cycle)
+            const BREATH_FREQ = 0.15;
+            const val = Math.sin(2 * Math.PI * BREATH_FREQ * t);
+            this.smoothedRate = val * 0.06; // moderate amplitude
+            this.computeVolumes();
+        }
+
+        computeVolumes() {
+            const clamped = Math.max(-RATE_CLAMP, Math.min(RATE_CLAMP, this.smoothedRate));
+
+            if (clamped > 0) {
+                this.inhaleVol = Math.min(1.0, clamped * this.ioFactor);
+                this.exhaleVol = 0;
+            } else {
+                this.exhaleVol = Math.min(1.0, (-clamped) * this.ioFactor);
+                this.inhaleVol = 0;
+            }
+        }
+
+        setIOFactor(factor) {
+            this.ioFactor = factor;
+        }
+
+        reset() {
+            this.previousBeta = null;
+            this.previousTime = null;
+            this.smoothedRate = 0;
+            this.inhaleVol = 0;
+            this.exhaleVol = 0;
+        }
+    }
+
+    // ==================== APP CONTROLLER ====================
+
+    const audio = new AudioEngine();
+    const motion = new MotionProcessor();
+
+    let isPlaying = false;
+    let audioInitialized = false;
+    let motionListening = false;
+    let debugVisible = false;
+    let debugTaps = 0;
+    let debugTimer = null;
+
+    // DOM elements
+    const playBtn = document.getElementById('play-btn');
+    const scenePicker = document.getElementById('scene-picker');
+    const slider = document.getElementById('sensitivity');
+    const statusMsg = document.getElementById('status-msg');
+    const scenePickerEl = document.getElementById('scene-picker');
+    const debugEl = document.getElementById('debug');
+    const titleEl = document.getElementById('title');
+
+    // ---- Scene switching ----
+    scenePicker.addEventListener('change', async () => {
+        if (!audioInitialized) return;
+        const wasPlaying = isPlaying;
+        if (wasPlaying) {
+            audio.stopSources();
+        }
+        setStatus('Loading...');
+        playBtn.classList.add('loading');
+        try {
+            await audio.loadScene(scenePicker.value);
+            if (wasPlaying) {
+                audio.startSources();
+            }
+            setStatus('');
+        } catch (e) {
+            setStatus('Error loading audio');
+        }
+        playBtn.classList.remove('loading');
+    });
+
+    // ---- Play / Pause ----
+    playBtn.addEventListener('click', async () => {
+        if (!audioInitialized) {
+            playBtn.textContent = 'Loading...';
+            playBtn.classList.add('loading');
+            try {
+                await initAudioAndMotion();
+                audioInitialized = true;
+            } catch (e) {
+                setStatus('Error: ' + e.message);
+                playBtn.textContent = 'Play';
+                playBtn.classList.remove('loading');
+                return;
+            }
+            playBtn.classList.remove('loading');
+        }
+
+        isPlaying = !isPlaying;
+        playBtn.textContent = isPlaying ? 'Pause' : 'Play';
+
+        if (isPlaying) {
+            audio.play();
+            startMotionLoop();
+        } else {
+            audio.stop();
+        }
+    });
+
+    // ---- Sensitivity slider ----
+    slider.addEventListener('input', () => {
+        const v = parseFloat(slider.value);
+        audio.setSteadyVolume(v);
+        const ioFactor = -120 * v + 41.2;
+        motion.setIOFactor(ioFactor);
+    });
+
+    // ---- Attack / Release sliders ----
+    const attackSlider = document.getElementById('attack-slider');
+    const releaseSlider = document.getElementById('release-slider');
+    const attackVal = document.getElementById('attack-val');
+    const releaseVal = document.getElementById('release-val');
+
+    attackSlider.addEventListener('input', () => {
+        ATTACK_TIME = parseFloat(attackSlider.value);
+        attackVal.textContent = ATTACK_TIME.toFixed(2) + 's';
+    });
+
+    releaseSlider.addEventListener('input', () => {
+        RELEASE_TIME = parseFloat(releaseSlider.value);
+        releaseVal.textContent = RELEASE_TIME.toFixed(2) + 's';
+    });
+
+    // ---- Debug panel (tap title 5x) ----
+    titleEl.addEventListener('click', () => {
+        debugTaps++;
+        clearTimeout(debugTimer);
+        debugTimer = setTimeout(() => { debugTaps = 0; }, 2000);
+        if (debugTaps >= 5) {
+            debugVisible = !debugVisible;
+            debugEl.style.display = debugVisible ? 'block' : 'none';
+            debugTaps = 0;
+        }
+    });
+
+    // ---- Initialization ----
+    async function initAudioAndMotion() {
+        // Init audio context (requires user gesture)
+        await audio.init();
+        setStatus('Loading audio...');
+        await audio.loadScene(scenePicker.value);
+
+        // Apply current slider value
+        const v = parseFloat(slider.value);
+        audio.setSteadyVolume(v);
+        motion.setIOFactor(-120 * v + 41.2);
+
+        // Request motion permission (iOS 13+)
+        await requestMotionPermission();
+        setStatus('');
+    }
+
+    async function requestMotionPermission() {
+        if (typeof DeviceOrientationEvent !== 'undefined'
+            && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            try {
+                const response = await DeviceOrientationEvent.requestPermission();
+                if (response === 'granted') {
+                    startOrientationListener();
+                    return;
+                } else {
+                    enableSimulation('Motion permission denied');
+                    return;
+                }
+            } catch (err) {
+                enableSimulation('Motion permission error');
+                return;
+            }
+        }
+
+        // Non-iOS: just start listening; startOrientationListener handles fallback
+        startOrientationListener();
+    }
+
+    let orientationSampleCount = 0;
+    let orientationFirstBeta = null;
+    let orientationHasVaried = false;
+
+    function startOrientationListener() {
+        if (motionListening) return;
+        motionListening = true;
+
+        window.addEventListener('deviceorientation', (e) => {
+            if (e.beta === null) return;
+
+            // Track whether beta actually changes (desktop browsers fire events with static 0)
+            orientationSampleCount++;
+            if (orientationFirstBeta === null) {
+                orientationFirstBeta = e.beta;
+            } else if (!orientationHasVaried && Math.abs(e.beta - orientationFirstBeta) > 0.01) {
+                orientationHasVaried = true;
+            }
+
+            if (!motion.motionDetected && orientationHasVaried) {
+                motion.motionDetected = true;
+                setStatus('');
+            }
+
+            if (motion.active) {
+                motion.processOrientation(e.beta, performance.now());
+            }
+        });
+
+        // After 2s, if events fired but values never changed, fall back to simulation
+        setTimeout(() => {
+            if (!orientationHasVaried && !motion.simulationMode) {
+                enableSimulation('No motion sensor detected');
+            }
+        }, 2000);
+    }
+
+    function enableSimulation(reason) {
+        motion.simulationMode = true;
+        motion.simulationStart = performance.now() / 1000;
+        setStatus(reason + ' — using guided breathing');
+    }
+
+    // ---- Main motion → audio loop ----
+    function startMotionLoop() {
+        motion.active = true;
+        motion.reset();
+
+        function tick() {
+            if (!isPlaying) {
+                motion.active = false;
+                return;
+            }
+
+            if (motion.simulationMode) {
+                const t = (performance.now() / 1000) - motion.simulationStart;
+                motion.simulateTick(t);
+            }
+
+            // Update audio volumes
+            audio.setBreathVolumes(motion.inhaleVol, motion.exhaleVol);
+
+            // Animate scene picker with breath
+            const intensity = motion.inhaleVol + motion.exhaleVol;
+            const spread = intensity * 12;
+            const alpha = intensity * 0.15;
+            const scale = 1 + intensity * 0.02;
+            scenePickerEl.style.boxShadow = `0 0 ${spread}px ${spread * 0.5}px rgba(0,0,0,${alpha})`;
+            scenePickerEl.style.transform = `scale(${scale})`;
+
+            // Debug info
+            if (debugVisible) {
+                debugEl.textContent =
+                    `smoothedRate: ${motion.smoothedRate.toFixed(4)}\n` +
+                    `inhaleVol:    ${motion.inhaleVol.toFixed(3)}\n` +
+                    `exhaleVol:    ${motion.exhaleVol.toFixed(3)}\n` +
+                    `ioFactor:     ${motion.ioFactor.toFixed(1)}\n` +
+                    `mode:         ${motion.simulationMode ? 'simulation' : 'motion'}\n` +
+                    `motionDetect: ${motion.motionDetected}`;
+            }
+
+            requestAnimationFrame(tick);
+        }
+
+        requestAnimationFrame(tick);
+    }
+
+    function setStatus(msg) {
+        statusMsg.textContent = msg;
+    }
+
+    // ---- Initial slider value display ----
+    setStatus('Place phone on chest, then press Play');
+    </script>
+</body>
+</html>
