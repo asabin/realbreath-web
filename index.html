@@ -204,6 +204,51 @@
             min-height: 18px;
         }
 
+        #mixer {
+            width: 100%;
+            background: #f8f8f8;
+            border-radius: 20px;
+            padding: 16px 20px;
+            margin-bottom: 10px;
+        }
+
+        .mix-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .mix-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .mix-row label {
+            font-size: 14px;
+            color: #555;
+            width: 55px;
+            flex-shrink: 0;
+        }
+
+        .mix-slider {
+            flex: 1;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #ddd;
+            border-radius: 2px;
+            outline: none;
+        }
+
+        .mix-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #555;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
         #debug {
             display: none;
             width: 100%;
@@ -231,8 +276,28 @@
                 <option value="river">River</option>
                 <option value="stream">Stream</option>
                 <option value="synth">Synth</option>
+                <option value="combo">Combination</option>
             </select>
             <span id="scene-arrows">▲▼</span>
+        </div>
+
+        <div id="mixer" style="display:none">
+            <div class="mix-row">
+                <label>Rain</label>
+                <input type="range" class="mix-slider" data-scene="rain" min="0" max="1" step="0.01" value="0.5">
+            </div>
+            <div class="mix-row">
+                <label>River</label>
+                <input type="range" class="mix-slider" data-scene="river" min="0" max="1" step="0.01" value="0">
+            </div>
+            <div class="mix-row">
+                <label>Stream</label>
+                <input type="range" class="mix-slider" data-scene="stream" min="0" max="1" step="0.01" value="0">
+            </div>
+            <div class="mix-row">
+                <label>Synth</label>
+                <input type="range" class="mix-slider" data-scene="synth" min="0" max="1" step="0.01" value="0">
+            </div>
         </div>
 
         <button id="play-btn">Play</button>
@@ -281,6 +346,12 @@
             this.playing = false;
             this.loadedScene = null;
             this.cache = {};  // cache decoded buffers by URL
+            // Combo mode
+            this.comboMode = false;
+            this.comboBuffers = {};   // { rain: {steady,inhale,exhale}, river: ... }
+            this.comboSources = {};   // { rain: {steady,inhale,exhale}, ... }
+            this.comboGains = {};     // { rain: {steady,inhale,exhale,mix}, ... }
+            this.comboLevels = { rain: 0.5, river: 0, stream: 0, synth: 0 };
         }
 
         async init() {
@@ -300,6 +371,21 @@
             this.gains.steady.gain.value = 0.07;
             this.gains.inhale.gain.value = 0;
             this.gains.exhale.gain.value = 0;
+
+            // Create combo gain nodes for each scene
+            for (const scene of Object.keys(SCENES)) {
+                this.comboGains[scene] = {
+                    steady: this.ctx.createGain(),
+                    inhale: this.ctx.createGain(),
+                    exhale: this.ctx.createGain(),
+                    mix: this.ctx.createGain(),
+                };
+                this.comboGains[scene].steady.connect(this.comboGains[scene].mix);
+                this.comboGains[scene].inhale.connect(this.comboGains[scene].mix);
+                this.comboGains[scene].exhale.connect(this.comboGains[scene].mix);
+                this.comboGains[scene].mix.connect(this.gains.master);
+                this.comboGains[scene].mix.gain.value = 0; // start silent
+            }
         }
 
         async fetchAndDecode(url) {
@@ -320,6 +406,23 @@
             ]);
             this.buffers = { steady, inhale, exhale };
             this.loadedScene = sceneKey;
+        }
+
+        async loadCombo() {
+            const promises = [];
+            for (const scene of Object.keys(SCENES)) {
+                const files = SCENES[scene];
+                promises.push(
+                    Promise.all([
+                        this.fetchAndDecode(files.steady),
+                        this.fetchAndDecode(files.inhale),
+                        this.fetchAndDecode(files.exhale),
+                    ]).then(([steady, inhale, exhale]) => {
+                        this.comboBuffers[scene] = { steady, inhale, exhale };
+                    })
+                );
+            }
+            await Promise.all(promises);
         }
 
         startSources() {
@@ -343,9 +446,52 @@
             }
         }
 
+        startComboSources() {
+            this.stopComboSources();
+            for (const scene of Object.keys(SCENES)) {
+                this.comboSources[scene] = {};
+                for (const key of ['steady', 'inhale', 'exhale']) {
+                    const src = this.ctx.createBufferSource();
+                    src.buffer = this.comboBuffers[scene][key];
+                    src.loop = true;
+                    src.connect(this.comboGains[scene][key]);
+                    src.start(0);
+                    this.comboSources[scene][key] = src;
+                }
+                // Apply current mix level
+                this.comboGains[scene].mix.gain.value = this.comboLevels[scene] || 0;
+            }
+        }
+
+        stopComboSources() {
+            for (const scene of Object.keys(SCENES)) {
+                if (this.comboSources[scene]) {
+                    for (const key of ['steady', 'inhale', 'exhale']) {
+                        if (this.comboSources[scene][key]) {
+                            try { this.comboSources[scene][key].stop(); } catch (e) {}
+                        }
+                    }
+                }
+                this.comboSources[scene] = null;
+            }
+        }
+
+        setComboMix(levels) {
+            this.comboLevels = levels;
+            for (const scene of Object.keys(levels)) {
+                if (this.comboGains[scene]) {
+                    this.comboGains[scene].mix.gain.value = levels[scene];
+                }
+            }
+        }
+
         play() {
             if (this.ctx.state === 'suspended') this.ctx.resume();
-            this.startSources();
+            if (this.comboMode) {
+                this.startComboSources();
+            } else {
+                this.startSources();
+            }
             // Fade in master over ~3s (time constant 1.0 → 95% in 3s)
             const now = this.ctx.currentTime;
             this.gains.master.gain.cancelScheduledValues(now);
@@ -361,17 +507,39 @@
             this.gains.master.gain.setTargetAtTime(0, now, 0.33);
             this.playing = false;
             setTimeout(() => {
-                if (!this.playing) this.stopSources();
+                if (!this.playing) {
+                    this.stopSources();
+                    this.stopComboSources();
+                }
             }, 1500);
         }
 
         setSteadyVolume(v) {
             if (this.gains.steady) this.gains.steady.gain.value = v;
+            // Also apply to combo steady gains
+            if (this.comboMode) {
+                for (const scene of Object.keys(SCENES)) {
+                    if (this.comboGains[scene]) {
+                        this.comboGains[scene].steady.gain.value = v;
+                    }
+                }
+            }
         }
 
         setBreathVolumes(inhaleVol, exhaleVol) {
-            if (this.gains.inhale) this.gains.inhale.gain.value = inhaleVol;
-            if (this.gains.exhale) this.gains.exhale.gain.value = exhaleVol;
+            if (this.comboMode) {
+                for (const scene of Object.keys(SCENES)) {
+                    if (this.comboGains[scene]) {
+                        this.comboGains[scene].inhale.gain.value = inhaleVol;
+                        this.comboGains[scene].exhale.gain.value = exhaleVol;
+                        this.comboGains[scene].steady.gain.value =
+                            parseFloat(document.getElementById('sensitivity')?.value || 0.07);
+                    }
+                }
+            } else {
+                if (this.gains.inhale) this.gains.inhale.gain.value = inhaleVol;
+                if (this.gains.exhale) this.gains.exhale.gain.value = exhaleVol;
+            }
         }
     }
 
@@ -500,20 +668,56 @@
     const scenePickerEl = document.getElementById('scene-picker');
     const debugEl = document.getElementById('debug');
     const titleEl = document.getElementById('title');
+    const mixerEl = document.getElementById('mixer');
+    const mixSliders = document.querySelectorAll('.mix-slider');
+
+    // ---- Mixer sliders ----
+    function getComboLevels() {
+        const levels = {};
+        mixSliders.forEach(s => { levels[s.dataset.scene] = parseFloat(s.value); });
+        return levels;
+    }
+
+    mixSliders.forEach(s => {
+        s.addEventListener('input', () => {
+            audio.setComboMix(getComboLevels());
+        });
+    });
 
     // ---- Scene switching ----
     scenePicker.addEventListener('change', async () => {
         if (!audioInitialized) return;
+        const isCombo = scenePicker.value === 'combo';
         const wasPlaying = isPlaying;
+
+        // Stop whatever is currently playing
         if (wasPlaying) {
             audio.stopSources();
+            audio.stopComboSources();
         }
+
+        // Show/hide mixer
+        mixerEl.style.display = isCombo ? 'block' : 'none';
+
         setStatus('Loading...');
         playBtn.classList.add('loading');
         try {
-            await audio.loadScene(scenePicker.value);
-            if (wasPlaying) {
-                audio.startSources();
+            if (isCombo) {
+                audio.comboMode = true;
+                await audio.loadCombo();
+                audio.setComboMix(getComboLevels());
+                if (wasPlaying) {
+                    audio.startComboSources();
+                    // Apply current sensitivity to combo steady gains
+                    const v = parseFloat(slider.value);
+                    audio.setSteadyVolume(v);
+                }
+            } else {
+                audio.comboMode = false;
+                await audio.loadScene(scenePicker.value);
+                if (wasPlaying) {
+                    audio.startSources();
+                }
             }
             setStatus('');
         } catch (e) {
@@ -623,7 +827,15 @@
         // Init audio context (requires user gesture)
         await audio.init();
         setStatus('Loading audio...');
-        await audio.loadScene(scenePicker.value);
+
+        if (scenePicker.value === 'combo') {
+            audio.comboMode = true;
+            mixerEl.style.display = 'block';
+            await audio.loadCombo();
+            audio.setComboMix(getComboLevels());
+        } else {
+            await audio.loadScene(scenePicker.value);
+        }
 
         // Apply current slider value
         const v = parseFloat(slider.value);
