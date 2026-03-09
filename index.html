@@ -210,13 +210,13 @@
         </div>
 
         <div class="param-slider">
-            <label>Attack <span class="value" id="attack-val">0.08s</span></label>
-            <input type="range" id="attack-slider" min="0.02" max="0.5" step="0.01" value="0.08">
+            <label>Attack <span class="value" id="attack-val">0.15s</span></label>
+            <input type="range" id="attack-slider" min="0.02" max="1.0" step="0.01" value="0.15">
         </div>
 
         <div class="param-slider">
-            <label>Release <span class="value" id="release-val">0.80s</span></label>
-            <input type="range" id="release-slider" min="0.1" max="2.0" step="0.05" value="0.80">
+            <label>Release <span class="value" id="release-val">1.20s</span></label>
+            <input type="range" id="release-slider" min="0.1" max="5.0" step="0.05" value="1.20">
         </div>
 
         <div id="status-msg"></div>
@@ -235,8 +235,8 @@
     };
 
     // Attack/release envelope constants (mutable — controlled by UI sliders)
-    let ATTACK_TIME = 0.08;             // seconds — fast onset tracking
-    let RELEASE_TIME = 0.80;            // seconds — smooth decay
+    let ATTACK_TIME = 0.15;             // seconds — fast onset tracking
+    let RELEASE_TIME = 1.20;            // seconds — smooth decay
     const MAX_DELTA_PER_SECOND = 0.3;   // rad/s — spike rejection clamp
     const DEAD_ZONE = 0.005;            // rad/s — ignore micro-tremors below this
     const CURVE_EXP = 1.5;              // power curve exponent (1=linear, 2=quadratic)
@@ -353,13 +353,14 @@
         constructor() {
             this.previousBeta = null;
             this.previousTime = null;
-            this.smoothedRate = 0;
-            this.ioFactor = 20;
+            this.smoothedRate = 0;    // low-pass filtered rate (for direction)
             this.active = false;
             this.motionDetected = false;
             this.simulationMode = false;
             this.simulationStart = 0;
+            this.lastDt = 1/60;
 
+            // Output volumes with independent attack/release envelopes
             this.inhaleVol = 0;
             this.exhaleVol = 0;
         }
@@ -368,7 +369,7 @@
             if (beta === null) return;
 
             const betaRad = beta * Math.PI / 180;
-            const now = timestamp / 1000; // ms → seconds
+            const now = timestamp / 1000;
 
             if (this.previousBeta === null) {
                 this.previousBeta = betaRad;
@@ -378,7 +379,6 @@
 
             const dt = now - this.previousTime;
             if (dt <= 0 || dt > 0.5) {
-                // Skip bad frames (first frame, tab backgrounded, etc.)
                 this.previousBeta = betaRad;
                 this.previousTime = now;
                 return;
@@ -388,57 +388,59 @@
             let rawDelta = betaRad - this.previousBeta;
             this.previousBeta = betaRad;
             this.previousTime = now;
+            this.lastDt = dt;
 
-            // Step 2: Spike rejection — clamp delta by max rate
+            // Step 2: Spike rejection
             const maxDelta = MAX_DELTA_PER_SECOND * dt;
             rawDelta = Math.max(-maxDelta, Math.min(maxDelta, rawDelta));
 
-            // Step 3: Convert to rate (frame-rate independent)
+            // Step 3: Convert to rate
             const deltaRate = rawDelta / dt;
 
-            // Step 4: Attack/release envelope follower
-            const attackCoeff = 1.0 - Math.exp(-dt / ATTACK_TIME);
-            const releaseCoeff = 1.0 - Math.exp(-dt / RELEASE_TIME);
+            // Step 4: Simple low-pass on rate (fixed ~50ms time constant for noise rejection)
+            const lpCoeff = 1.0 - Math.exp(-dt / 0.05);
+            this.smoothedRate += lpCoeff * (deltaRate - this.smoothedRate);
 
-            const coeff = (Math.abs(deltaRate) > Math.abs(this.smoothedRate))
-                ? attackCoeff : releaseCoeff;
-            this.smoothedRate += coeff * (deltaRate - this.smoothedRate);
-
-            // Step 5: Compute volumes
-            this.computeVolumes();
+            // Step 5: Compute raw target volumes from smoothed rate
+            this.applyEnvelope(dt);
         }
 
         simulateTick(t) {
-            // Sine wave breathing at ~0.15 Hz (6.7s cycle)
             const BREATH_FREQ = 0.15;
             const val = Math.sin(2 * Math.PI * BREATH_FREQ * t);
-            this.smoothedRate = val * FULL_SCALE * 0.8; // 80% of full scale
-            this.computeVolumes();
+            this.smoothedRate = val * FULL_SCALE * 0.8;
+            this.applyEnvelope(1/60);
         }
 
-        computeVolumes() {
+        applyEnvelope(dt) {
             const magnitude = Math.abs(this.smoothedRate);
 
-            // Dead zone: ignore micro-tremors
-            if (magnitude < DEAD_ZONE) {
-                this.inhaleVol = 0;
-                this.exhaleVol = 0;
-                return;
+            // Compute raw target volumes from rate
+            let targetInhale = 0;
+            let targetExhale = 0;
+
+            if (magnitude > DEAD_ZONE) {
+                const normalized = Math.min(1.0, (magnitude - DEAD_ZONE) / (FULL_SCALE - DEAD_ZONE));
+                const curved = Math.pow(normalized, CURVE_EXP);
+
+                if (this.smoothedRate > 0) {
+                    targetInhale = curved;
+                } else {
+                    targetExhale = curved;
+                }
             }
 
-            // Normalize to [0, 1] within the full-scale range
-            const normalized = Math.min(1.0, (magnitude - DEAD_ZONE) / (FULL_SCALE - DEAD_ZONE));
+            // Apply attack/release envelope to each volume independently
+            const attackCoeff = 1.0 - Math.exp(-dt / ATTACK_TIME);
+            const releaseCoeff = 1.0 - Math.exp(-dt / RELEASE_TIME);
 
-            // Power curve: small tilts stay quiet, need real breathing for loud
-            const curved = Math.pow(normalized, CURVE_EXP);
+            // Inhale envelope
+            const inhaleCoeff = (targetInhale > this.inhaleVol) ? attackCoeff : releaseCoeff;
+            this.inhaleVol += inhaleCoeff * (targetInhale - this.inhaleVol);
 
-            if (this.smoothedRate > 0) {
-                this.inhaleVol = curved;
-                this.exhaleVol = 0;
-            } else {
-                this.exhaleVol = curved;
-                this.inhaleVol = 0;
-            }
+            // Exhale envelope
+            const exhaleCoeff = (targetExhale > this.exhaleVol) ? attackCoeff : releaseCoeff;
+            this.exhaleVol += exhaleCoeff * (targetExhale - this.exhaleVol);
         }
 
         reset() {
