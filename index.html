@@ -239,8 +239,8 @@
     let RELEASE_TIME = 0.50;            // seconds — smooth decay
     const MAX_DELTA_PER_SECOND = 0.3;   // rad/s — spike rejection clamp
     const DEAD_ZONE = 0.005;            // rad/s — ignore micro-tremors below this
-    const CURVE_EXP = 1.5;              // power curve exponent (1=linear, 2=quadratic)
-    let FULL_SCALE = 0.12;              // rad/s — rate at which volume reaches 1.0
+    const CURVE_EXP = 2.0;              // power curve exponent (1=linear, 2=quadratic)
+    let FULL_SCALE = 0.25;              // rad/s — rate at which volume reaches 1.0
 
     // ==================== AUDIO ENGINE ====================
 
@@ -533,7 +533,7 @@
         const v = parseFloat(slider.value);
         audio.setSteadyVolume(v);
         // Map slider to fullScale: 0.01→0.03 (very sensitive), 0.3→0.25 (need big breaths)
-        FULL_SCALE = 0.03 + (v - 0.01) * (0.25 - 0.03) / (0.3 - 0.01);
+        FULL_SCALE = 0.10 + (v - 0.01) * (0.50 - 0.10) / (0.3 - 0.01);
     });
 
     // ---- Attack / Release sliders ----
@@ -574,7 +574,7 @@
         // Apply current slider value
         const v = parseFloat(slider.value);
         audio.setSteadyVolume(v);
-        FULL_SCALE = 0.03 + (v - 0.01) * (0.25 - 0.03) / (0.3 - 0.01);
+        FULL_SCALE = 0.10 + (v - 0.01) * (0.50 - 0.10) / (0.3 - 0.01);
         setStatus('');
     }
 
