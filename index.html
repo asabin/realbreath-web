@@ -4,6 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>RealBreath</title>
+
+    <!-- Favicon — breath wave icon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23222'/%3E%3Cpath d='M12 32 Q22 18 32 32 Q42 46 52 32' stroke='white' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+
+    <!-- Open Graph / Link Preview -->
+    <meta property="og:title" content="RealBreath">
+    <meta property="og:description" content="Breathe with nature. Place your phone on your chest and let your breath shape the sound.">
+    <meta property="og:image" content="https://asabin.github.io/realbreath-web/phoneimg8.png">
+    <meta property="og:url" content="https://asabin.github.io/realbreath-web/">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="RealBreath">
+    <meta name="twitter:description" content="Breathe with nature. Place your phone on your chest and let your breath shape the sound.">
+    <meta name="twitter:image" content="https://asabin.github.io/realbreath-web/phoneimg8.png">
+    <meta name="description" content="Breathe with nature. Place your phone on your chest and let your breath shape the sound.">
+
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -46,9 +62,27 @@
             opacity: 0.85;
         }
 
+        #scene-wrap {
+            width: 100%;
+            position: relative;
+            margin-bottom: 10px;
+        }
+
+        #scene-arrows {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            line-height: 1.2;
+            color: #aaa;
+            pointer-events: none;
+            letter-spacing: -1px;
+        }
+
         #scene-picker {
             width: 100%;
-            padding: 16px 20px;
+            padding: 16px 40px 16px 20px;
             font-family: 'Futura', 'Century Gothic', sans-serif;
             font-size: 16px;
             border: none;
@@ -59,7 +93,6 @@
             appearance: none;
             -webkit-appearance: none;
             color: #333;
-            margin-bottom: 10px;
             cursor: pointer;
             transition: box-shadow 0.15s ease-out, transform 0.15s ease-out;
             box-shadow: 0 0 0 0 rgba(0,0,0,0);
@@ -192,12 +225,15 @@
 
         <img id="instruction-img" src="phoneimg8.png" alt="Place phone on chest — tilt controls sound">
 
-        <select id="scene-picker">
-            <option value="rain">Rain</option>
-            <option value="river">River</option>
-            <option value="stream">Stream</option>
-            <option value="synth">Synth</option>
-        </select>
+        <div id="scene-wrap">
+            <select id="scene-picker">
+                <option value="rain">Rain</option>
+                <option value="river">River</option>
+                <option value="stream">Stream</option>
+                <option value="synth">Synth</option>
+            </select>
+            <span id="scene-arrows">▲▼</span>
+        </div>
 
         <button id="play-btn">Play</button>
 
