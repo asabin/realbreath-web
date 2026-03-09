@@ -210,13 +210,13 @@
         </div>
 
         <div class="param-slider">
-            <label>Attack <span class="value" id="attack-val">0.15s</span></label>
-            <input type="range" id="attack-slider" min="0.02" max="1.0" step="0.01" value="0.15">
+            <label>Attack <span class="value" id="attack-val">0.25s</span></label>
+            <input type="range" id="attack-slider" min="0.05" max="0.5" step="0.01" value="0.25">
         </div>
 
         <div class="param-slider">
-            <label>Release <span class="value" id="release-val">1.20s</span></label>
-            <input type="range" id="release-slider" min="0.1" max="5.0" step="0.05" value="1.20">
+            <label>Release <span class="value" id="release-val">0.50s</span></label>
+            <input type="range" id="release-slider" min="0.1" max="1.5" step="0.05" value="0.50">
         </div>
 
         <div id="status-msg"></div>
@@ -235,8 +235,8 @@
     };
 
     // Attack/release envelope constants (mutable — controlled by UI sliders)
-    let ATTACK_TIME = 0.15;             // seconds — fast onset tracking
-    let RELEASE_TIME = 1.20;            // seconds — smooth decay
+    let ATTACK_TIME = 0.25;             // seconds — fast onset tracking
+    let RELEASE_TIME = 0.50;            // seconds — smooth decay
     const MAX_DELTA_PER_SECOND = 0.3;   // rad/s — spike rejection clamp
     const DEAD_ZONE = 0.005;            // rad/s — ignore micro-tremors below this
     const CURVE_EXP = 1.5;              // power curve exponent (1=linear, 2=quadratic)
