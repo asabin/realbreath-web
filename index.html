@@ -237,8 +237,10 @@
     // Attack/release envelope constants (mutable — controlled by UI sliders)
     let ATTACK_TIME = 0.08;             // seconds — fast onset tracking
     let RELEASE_TIME = 0.80;            // seconds — smooth decay
-    const MAX_DELTA_PER_SECOND = 0.15;  // rad/s — spike rejection clamp
-    const RATE_CLAMP = 0.12;            // rad/s — max magnitude for volume mapping
+    const MAX_DELTA_PER_SECOND = 0.3;   // rad/s — spike rejection clamp
+    const DEAD_ZONE = 0.005;            // rad/s — ignore micro-tremors below this
+    const CURVE_EXP = 1.5;              // power curve exponent (1=linear, 2=quadratic)
+    let FULL_SCALE = 0.12;              // rad/s — rate at which volume reaches 1.0
 
     // ==================== AUDIO ENGINE ====================
 
@@ -410,24 +412,33 @@
             // Sine wave breathing at ~0.15 Hz (6.7s cycle)
             const BREATH_FREQ = 0.15;
             const val = Math.sin(2 * Math.PI * BREATH_FREQ * t);
-            this.smoothedRate = val * 0.06; // moderate amplitude
+            this.smoothedRate = val * FULL_SCALE * 0.8; // 80% of full scale
             this.computeVolumes();
         }
 
         computeVolumes() {
-            const clamped = Math.max(-RATE_CLAMP, Math.min(RATE_CLAMP, this.smoothedRate));
+            const magnitude = Math.abs(this.smoothedRate);
 
-            if (clamped > 0) {
-                this.inhaleVol = Math.min(1.0, clamped * this.ioFactor);
+            // Dead zone: ignore micro-tremors
+            if (magnitude < DEAD_ZONE) {
+                this.inhaleVol = 0;
+                this.exhaleVol = 0;
+                return;
+            }
+
+            // Normalize to [0, 1] within the full-scale range
+            const normalized = Math.min(1.0, (magnitude - DEAD_ZONE) / (FULL_SCALE - DEAD_ZONE));
+
+            // Power curve: small tilts stay quiet, need real breathing for loud
+            const curved = Math.pow(normalized, CURVE_EXP);
+
+            if (this.smoothedRate > 0) {
+                this.inhaleVol = curved;
                 this.exhaleVol = 0;
             } else {
-                this.exhaleVol = Math.min(1.0, (-clamped) * this.ioFactor);
+                this.exhaleVol = curved;
                 this.inhaleVol = 0;
             }
-        }
-
-        setIOFactor(factor) {
-            this.ioFactor = factor;
         }
 
         reset() {
@@ -514,11 +525,13 @@
     });
 
     // ---- Sensitivity slider ----
+    // Left (0.01) = very sensitive (small fullScale, low steady vol)
+    // Right (0.3) = less sensitive (large fullScale, high steady vol)
     slider.addEventListener('input', () => {
         const v = parseFloat(slider.value);
         audio.setSteadyVolume(v);
-        const ioFactor = -120 * v + 41.2;
-        motion.setIOFactor(ioFactor);
+        // Map slider to fullScale: 0.01→0.03 (very sensitive), 0.3→0.25 (need big breaths)
+        FULL_SCALE = 0.03 + (v - 0.01) * (0.25 - 0.03) / (0.3 - 0.01);
     });
 
     // ---- Attack / Release sliders ----
@@ -559,7 +572,7 @@
         // Apply current slider value
         const v = parseFloat(slider.value);
         audio.setSteadyVolume(v);
-        motion.setIOFactor(-120 * v + 41.2);
+        FULL_SCALE = 0.03 + (v - 0.01) * (0.25 - 0.03) / (0.3 - 0.01);
         setStatus('');
     }
 
@@ -661,7 +674,7 @@
                     `smoothedRate: ${motion.smoothedRate.toFixed(4)}\n` +
                     `inhaleVol:    ${motion.inhaleVol.toFixed(3)}\n` +
                     `exhaleVol:    ${motion.exhaleVol.toFixed(3)}\n` +
-                    `ioFactor:     ${motion.ioFactor.toFixed(1)}\n` +
+                    `fullScale:    ${FULL_SCALE.toFixed(3)} rad/s\n` +
                     `mode:         ${motion.simulationMode ? 'simulation' : 'motion'}\n` +
                     `motionDetect: ${motion.motionDetected}\n` +
                     `betaVaried:   ${orientationHasVaried}\n` +
