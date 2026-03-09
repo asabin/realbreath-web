@@ -210,15 +210,6 @@
             </div>
         </div>
 
-        <div class="param-slider">
-            <label>Attack <span class="value" id="attack-val">0.25s</span></label>
-            <input type="range" id="attack-slider" min="0.05" max="0.5" step="0.01" value="0.25">
-        </div>
-
-        <div class="param-slider">
-            <label>Release <span class="value" id="release-val">0.50s</span></label>
-            <input type="range" id="release-slider" min="0.1" max="1.5" step="0.05" value="0.50">
-        </div>
 
         <div id="status-msg"></div>
     </div>
@@ -537,21 +528,6 @@
         FULL_SCALE = 0.10 + (v - 0.01) * (0.50 - 0.10) / (0.3 - 0.01);
     });
 
-    // ---- Attack / Release sliders ----
-    const attackSlider = document.getElementById('attack-slider');
-    const releaseSlider = document.getElementById('release-slider');
-    const attackVal = document.getElementById('attack-val');
-    const releaseVal = document.getElementById('release-val');
-
-    attackSlider.addEventListener('input', () => {
-        ATTACK_TIME = parseFloat(attackSlider.value);
-        attackVal.textContent = ATTACK_TIME.toFixed(2) + 's';
-    });
-
-    releaseSlider.addEventListener('input', () => {
-        RELEASE_TIME = parseFloat(releaseSlider.value);
-        releaseVal.textContent = RELEASE_TIME.toFixed(2) + 's';
-    });
 
     // ---- Debug panel (tap title 5x) ----
     titleEl.addEventListener('click', () => {
