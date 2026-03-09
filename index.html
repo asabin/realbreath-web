@@ -565,8 +565,22 @@
         }
     });
 
+    // ---- iOS silent-switch bypass ----
+    // Playing a tiny silent clip via <audio> element forces iOS into
+    // "playback" audio session, bypassing the ringer/silent switch.
+    function unlockIOSAudio() {
+        const silentDataURI = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwmHAAAAAAD/+1DEAAAHAAGf9AAAIiWJs/80AAAATQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//tQxBUAAADSAAAAAAAAANIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//tQxBUAAADSAAAAAAAAANIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+        const a = document.createElement('audio');
+        a.controls = false;
+        a.preload = 'auto';
+        a.src = silentDataURI;
+        a.play().catch(() => {});
+    }
+
     // ---- Initialization ----
     async function initAudio() {
+        // Force iOS into playback mode (bypasses silent switch)
+        unlockIOSAudio();
         // Init audio context (requires user gesture)
         await audio.init();
         setStatus('Loading audio...');
