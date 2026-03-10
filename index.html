@@ -305,9 +305,9 @@
         <div id="slider-container">
             <input type="range" id="sensitivity" min="0.01" max="0.3" step="0.005" value="0.07">
             <div id="slider-labels">
-                <span>Breath</span>
-                <span class="center">Sensitivity</span>
                 <span>Steady</span>
+                <span class="center">Sensitivity</span>
+                <span>Breath</span>
             </div>
         </div>
 
@@ -556,6 +556,11 @@
             this.simulationStart = 0;
             this.lastDt = 1/60;
 
+            // Jitter detection: track recent rate variance to suppress erratic motion
+            this.smoothedRateSq = 0;  // low-pass of rate^2 (for variance calc)
+            this.smoothedAbsRate = 0; // low-pass of |rate|
+            this.jitterGate = 1.0;    // 0=suppressed, 1=full output
+
             // Output volumes with independent attack/release envelopes
             this.inhaleVol = 0;
             this.exhaleVol = 0;
@@ -586,7 +591,7 @@
             this.previousTime = now;
             this.lastDt = dt;
 
-            // Step 2: Spike rejection
+            // Step 2: Spike rejection (clamp extreme per-frame changes)
             const maxDelta = MAX_DELTA_PER_SECOND * dt;
             rawDelta = Math.max(-maxDelta, Math.min(maxDelta, rawDelta));
 
@@ -597,7 +602,25 @@
             const lpCoeff = 1.0 - Math.exp(-dt / 0.05);
             this.smoothedRate += lpCoeff * (deltaRate - this.smoothedRate);
 
-            // Step 5: Compute raw target volumes from smoothed rate
+            // Step 5: Jitter gate — detect erratic motion and suppress output
+            // Breathing is smooth (low variance relative to magnitude).
+            // Picking up / putting down the phone creates high-frequency chaos.
+            const jitterLpCoeff = 1.0 - Math.exp(-dt / 0.3); // ~300ms window
+            this.smoothedRateSq += jitterLpCoeff * (deltaRate * deltaRate - this.smoothedRateSq);
+            this.smoothedAbsRate += jitterLpCoeff * (Math.abs(deltaRate) - this.smoothedAbsRate);
+            // Variance = E[x^2] - E[|x|]^2 (approx, using |x| instead of x to catch oscillation)
+            const variance = Math.max(0, this.smoothedRateSq - this.smoothedAbsRate * this.smoothedAbsRate);
+            // Coefficient of variation: high = erratic, low = smooth breathing
+            const cv = this.smoothedAbsRate > 0.01 ? Math.sqrt(variance) / this.smoothedAbsRate : 0;
+            // Gate: suppress when CV is high (> 0.8 = erratic), fully open when CV < 0.3
+            const targetGate = cv < 0.3 ? 1.0 : cv > 0.8 ? 0.0 : 1.0 - (cv - 0.3) / 0.5;
+            // Smooth the gate itself (fast close ~100ms, slow open ~500ms)
+            const gateCoeff = targetGate < this.jitterGate
+                ? (1.0 - Math.exp(-dt / 0.1))    // close fast
+                : (1.0 - Math.exp(-dt / 0.5));   // open slow
+            this.jitterGate += gateCoeff * (targetGate - this.jitterGate);
+
+            // Step 6: Compute target volumes with jitter gate applied
             this.applyEnvelope(dt);
         }
 
@@ -605,6 +628,7 @@
             const BREATH_FREQ = 0.15;
             const val = Math.sin(2 * Math.PI * BREATH_FREQ * t);
             this.smoothedRate = val * FULL_SCALE * 0.8;
+            this.jitterGate = 1.0; // simulation is always smooth
             this.applyEnvelope(1/60);
         }
 
@@ -626,6 +650,10 @@
                 }
             }
 
+            // Apply jitter gate: suppress volume during erratic motion
+            targetInhale *= this.jitterGate;
+            targetExhale *= this.jitterGate;
+
             // Apply attack/release envelope to each volume independently
             const attackCoeff = 1.0 - Math.exp(-dt / ATTACK_TIME);
             const releaseCoeff = 1.0 - Math.exp(-dt / RELEASE_TIME);
@@ -643,6 +671,9 @@
             this.previousBeta = null;
             this.previousTime = null;
             this.smoothedRate = 0;
+            this.smoothedRateSq = 0;
+            this.smoothedAbsRate = 0;
+            this.jitterGate = 1.0;
             this.inhaleVol = 0;
             this.exhaleVol = 0;
         }
@@ -709,8 +740,7 @@
                 if (wasPlaying) {
                     audio.startComboSources();
                     // Apply current sensitivity to combo steady gains
-                    const v = parseFloat(slider.value);
-                    audio.setSteadyVolume(v);
+                    applySensitivity(parseFloat(slider.value));
                 }
             } else {
                 audio.comboMode = false;
@@ -759,13 +789,16 @@
     });
 
     // ---- Sensitivity slider ----
-    // Left (0.01) = very sensitive (small fullScale, low steady vol)
-    // Right (0.3) = less sensitive (large fullScale, high steady vol)
+    // Left (0.01) = steady (high steady vol, high fullScale)
+    // Right (0.3) = breath-sensitive (low steady vol, low fullScale)
+    function applySensitivity(v) {
+        // Invert: slider goes 0.01–0.3, but we want left=steady, right=breath
+        const inv = 0.31 - v; // invert so 0.01→0.30, 0.3→0.01
+        audio.setSteadyVolume(inv);
+        FULL_SCALE = 0.10 + (inv - 0.01) * (0.50 - 0.10) / (0.3 - 0.01);
+    }
     slider.addEventListener('input', () => {
-        const v = parseFloat(slider.value);
-        audio.setSteadyVolume(v);
-        // Map slider to fullScale: 0.01→0.03 (very sensitive), 0.3→0.25 (need big breaths)
-        FULL_SCALE = 0.10 + (v - 0.01) * (0.50 - 0.10) / (0.3 - 0.01);
+        applySensitivity(parseFloat(slider.value));
     });
 
 
@@ -838,9 +871,7 @@
         }
 
         // Apply current slider value
-        const v = parseFloat(slider.value);
-        audio.setSteadyVolume(v);
-        FULL_SCALE = 0.10 + (v - 0.01) * (0.50 - 0.10) / (0.3 - 0.01);
+        applySensitivity(parseFloat(slider.value));
         setStatus('');
     }
 
