@@ -371,8 +371,11 @@
             this.gains.steady.gain.value = 0.07;
             this.gains.inhale.gain.value = 0;
             this.gains.exhale.gain.value = 0;
+        }
 
-            // Create combo gain nodes for each scene
+        // Lazy-init combo gain nodes (only when combo mode is first entered)
+        initComboGains() {
+            if (Object.keys(this.comboGains).length > 0) return; // already created
             for (const scene of Object.keys(SCENES)) {
                 this.comboGains[scene] = {
                     steady: this.ctx.createGain(),
@@ -384,7 +387,7 @@
                 this.comboGains[scene].inhale.connect(this.comboGains[scene].mix);
                 this.comboGains[scene].exhale.connect(this.comboGains[scene].mix);
                 this.comboGains[scene].mix.connect(this.gains.master);
-                this.comboGains[scene].mix.gain.value = 0; // start silent
+                this.comboGains[scene].mix.gain.value = 0;
             }
         }
 
@@ -702,6 +705,7 @@
         try {
             if (isCombo) {
                 audio.comboMode = true;
+                audio.initComboGains();
                 await audio.loadCombo();
                 audio.setComboMix(getComboLevels());
                 if (wasPlaying) {
@@ -830,6 +834,7 @@
 
         if (scenePicker.value === 'combo') {
             audio.comboMode = true;
+            audio.initComboGains();
             mixerEl.style.display = 'block';
             await audio.loadCombo();
             audio.setComboMix(getComboLevels());
