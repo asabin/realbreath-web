@@ -557,6 +557,11 @@
             this.simulationStart = 0;
             this.lastDt = 1/60;
 
+            // Subtle jitter gate — only suppresses truly erratic motion (phone pickup)
+            this.smoothedRateSq = 0;
+            this.smoothedAbsRate = 0;
+            this.jitterGate = 1.0;
+
             // Output volumes with independent attack/release envelopes
             this.inhaleVol = 0;
             this.exhaleVol = 0;
@@ -598,7 +603,20 @@
             const lpCoeff = 1.0 - Math.exp(-dt / 0.05);
             this.smoothedRate += lpCoeff * (deltaRate - this.smoothedRate);
 
-            // Step 5: Compute target volumes from smoothed rate
+            // Step 5: Subtle jitter gate — only suppress truly erratic motion
+            const jlp = 1.0 - Math.exp(-dt / 0.25); // ~250ms window
+            this.smoothedRateSq += jlp * (deltaRate * deltaRate - this.smoothedRateSq);
+            this.smoothedAbsRate += jlp * (Math.abs(deltaRate) - this.smoothedAbsRate);
+            const variance = Math.max(0, this.smoothedRateSq - this.smoothedAbsRate * this.smoothedAbsRate);
+            const cv = this.smoothedAbsRate > 0.02 ? Math.sqrt(variance) / this.smoothedAbsRate : 0;
+            // Very lenient: only gate when CV > 1.0 (extremely chaotic), fully open below 0.7
+            const targetGate = cv < 0.7 ? 1.0 : cv > 1.2 ? 0.0 : 1.0 - (cv - 0.7) / 0.5;
+            const gateCoeff = targetGate < this.jitterGate
+                ? (1.0 - Math.exp(-dt / 0.08))   // close fast
+                : (1.0 - Math.exp(-dt / 0.2));    // open fast too
+            this.jitterGate += gateCoeff * (targetGate - this.jitterGate);
+
+            // Step 6: Compute target volumes from smoothed rate
             this.applyEnvelope(dt);
         }
 
@@ -606,6 +624,7 @@
             const BREATH_FREQ = 0.15;
             const val = Math.sin(2 * Math.PI * BREATH_FREQ * t);
             this.smoothedRate = val * FULL_SCALE * 0.8;
+            this.jitterGate = 1.0;
             this.applyEnvelope(1/60);
         }
 
@@ -627,6 +646,10 @@
                 }
             }
 
+            // Apply jitter gate
+            targetInhale *= this.jitterGate;
+            targetExhale *= this.jitterGate;
+
             // Apply attack/release envelope to each volume independently
             const attackCoeff = 1.0 - Math.exp(-dt / ATTACK_TIME);
             const releaseCoeff = 1.0 - Math.exp(-dt / RELEASE_TIME);
@@ -644,6 +667,9 @@
             this.previousBeta = null;
             this.previousTime = null;
             this.smoothedRate = 0;
+            this.smoothedRateSq = 0;
+            this.smoothedAbsRate = 0;
+            this.jitterGate = 1.0;
             this.inhaleVol = 0;
             this.exhaleVol = 0;
         }
