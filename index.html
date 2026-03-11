@@ -532,8 +532,6 @@
                     if (this.comboGains[scene]) {
                         this.comboGains[scene].inhale.gain.value = inhaleVol;
                         this.comboGains[scene].exhale.gain.value = exhaleVol;
-                        this.comboGains[scene].steady.gain.value =
-                            parseFloat(document.getElementById('sensitivity')?.value || 0.07);
                     }
                 }
             } else {
