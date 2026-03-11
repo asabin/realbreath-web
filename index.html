@@ -556,11 +556,6 @@
             this.simulationStart = 0;
             this.lastDt = 1/60;
 
-            // Jitter detection: track recent rate variance to suppress erratic motion
-            this.smoothedRateSq = 0;  // low-pass of rate^2 (for variance calc)
-            this.smoothedAbsRate = 0; // low-pass of |rate|
-            this.jitterGate = 1.0;    // 0=suppressed, 1=full output
-
             // Output volumes with independent attack/release envelopes
             this.inhaleVol = 0;
             this.exhaleVol = 0;
@@ -602,25 +597,7 @@
             const lpCoeff = 1.0 - Math.exp(-dt / 0.05);
             this.smoothedRate += lpCoeff * (deltaRate - this.smoothedRate);
 
-            // Step 5: Jitter gate — detect erratic motion and suppress output
-            // Breathing is smooth (low variance relative to magnitude).
-            // Picking up / putting down the phone creates high-frequency chaos.
-            const jitterLpCoeff = 1.0 - Math.exp(-dt / 0.3); // ~300ms window
-            this.smoothedRateSq += jitterLpCoeff * (deltaRate * deltaRate - this.smoothedRateSq);
-            this.smoothedAbsRate += jitterLpCoeff * (Math.abs(deltaRate) - this.smoothedAbsRate);
-            // Variance = E[x^2] - E[|x|]^2 (approx, using |x| instead of x to catch oscillation)
-            const variance = Math.max(0, this.smoothedRateSq - this.smoothedAbsRate * this.smoothedAbsRate);
-            // Coefficient of variation: high = erratic, low = smooth breathing
-            const cv = this.smoothedAbsRate > 0.01 ? Math.sqrt(variance) / this.smoothedAbsRate : 0;
-            // Gate: suppress when CV is high (> 0.8 = erratic), fully open when CV < 0.3
-            const targetGate = cv < 0.3 ? 1.0 : cv > 0.8 ? 0.0 : 1.0 - (cv - 0.3) / 0.5;
-            // Smooth the gate itself (fast close ~100ms, slow open ~500ms)
-            const gateCoeff = targetGate < this.jitterGate
-                ? (1.0 - Math.exp(-dt / 0.1))    // close fast
-                : (1.0 - Math.exp(-dt / 0.5));   // open slow
-            this.jitterGate += gateCoeff * (targetGate - this.jitterGate);
-
-            // Step 6: Compute target volumes with jitter gate applied
+            // Step 5: Compute target volumes from smoothed rate
             this.applyEnvelope(dt);
         }
 
@@ -628,7 +605,6 @@
             const BREATH_FREQ = 0.15;
             const val = Math.sin(2 * Math.PI * BREATH_FREQ * t);
             this.smoothedRate = val * FULL_SCALE * 0.8;
-            this.jitterGate = 1.0; // simulation is always smooth
             this.applyEnvelope(1/60);
         }
 
@@ -650,10 +626,6 @@
                 }
             }
 
-            // Apply jitter gate: suppress volume during erratic motion
-            targetInhale *= this.jitterGate;
-            targetExhale *= this.jitterGate;
-
             // Apply attack/release envelope to each volume independently
             const attackCoeff = 1.0 - Math.exp(-dt / ATTACK_TIME);
             const releaseCoeff = 1.0 - Math.exp(-dt / RELEASE_TIME);
@@ -671,9 +643,6 @@
             this.previousBeta = null;
             this.previousTime = null;
             this.smoothedRate = 0;
-            this.smoothedRateSq = 0;
-            this.smoothedAbsRate = 0;
-            this.jitterGate = 1.0;
             this.inhaleVol = 0;
             this.exhaleVol = 0;
         }
