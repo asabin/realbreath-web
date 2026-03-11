@@ -303,7 +303,7 @@
         <button id="play-btn">Play</button>
 
         <div id="slider-container">
-            <input type="range" id="sensitivity" min="0.01" max="0.3" step="0.005" value="0.155">
+            <input type="range" id="sensitivity" min="0.01" max="0.3" step="0.005" value="0.2275">
             <div id="slider-labels">
                 <span>Steady</span>
                 <span class="center">Sensitivity</span>
@@ -763,11 +763,8 @@
     function applySensitivity(v) {
         // Invert: slider goes 0.01–0.3, but we want left=steady, right=breath
         const inv = 0.31 - v; // invert so 0.01→0.30, 0.3→0.01
-        // Map inv 0.01–0.30 to steady volume 0.01–0.15 (cap lower so breath isn't drowned out)
-        const steadyVol = 0.01 + (inv - 0.01) * (0.15 - 0.01) / (0.30 - 0.01);
-        audio.setSteadyVolume(steadyVol);
-        // Map inv 0.01–0.30 to FULL_SCALE 0.08–0.35 (lower range = more responsive)
-        FULL_SCALE = 0.08 + (inv - 0.01) * (0.35 - 0.08) / (0.30 - 0.01);
+        audio.setSteadyVolume(inv);
+        FULL_SCALE = 0.10 + (inv - 0.01) * (0.50 - 0.10) / (0.3 - 0.01);
     }
     slider.addEventListener('input', () => {
         applySensitivity(parseFloat(slider.value));
